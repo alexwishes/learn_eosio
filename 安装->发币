@@ -1,0 +1,91 @@
+# `[本文基于EOSIO DAWN 4.1版本进行讲解]`
+## 1. 简介
+### 1.1 EOS组件
+1) nodeos -- EOS服务器端组件，用来跟其他EOS连接同步数据
+2) keosd -- EOS钱包组件
+3) cleos -- 命令行客户端
+### 1.2 简易示意图
+![0_1529890556308_Basic-EOSIO-System-Architecture.png](/assets/uploads/files/1529890558827-basic-eosio-system-architecture-resized.png) 
+##  2. 安装
+本文是用自动化安装脚本完成安装的，docker方式以及手动方式请查看官方开发者网站：http://developers.eos.io/
+### 2.1 获取源代码：
+`git clone https://github.com/EOSIO/eos --recursive` #加入--recursive是告诉git下载依赖的submodule
+### 2.2 修改配置文件
+由于官方的脚本要求操作系统必须满足7G内存，20G硬盘这个条件才能安装，我们需要自行修改安装脚本，这里以Ubuntu为例（配置高的忽略这项......）
+1. `vi eos/script/eosio_build_ubuntu.sh`
+2. 注释以下代码，屏蔽掉内存和硬盘的检查
+```
+      if [ "${MEM_MEG}" -lt 7000 ]; then
+          printf "\\tYour system must have 7 or more Gigabytes of physical memory installed.\\n"
+          printf "\\tExiting now.\\n"
+          exit 1
+      fi
+``` 
+```
+     if [ "${DISK_AVAIL%.*}" -lt "${DISK_MIN}" ]; then
+         printf "\\tYou must have at least %sGB of available storage to install EOSIO.\\n" "${DISK_MIN}"
+         printf "\\tExiting now.\\n"
+         exit 1
+     fi
+```
+#### 2.3  执行自动化安装
+在EOS目录下执行`./eosio_build.sh`开始自动化安装，等脚本执行完毕
+
+#### 2.4 关联快捷方式
+这一步不是必须的，完成2.3之后，会在eos目录生成一个build目录，进入目录里面执行`sudo make install`等待完成即可完成各个组件的快捷方式关联
+
+也可以直接在`build/programs/`找到各个组件的执行程序
+
+## 3. 使用
+这里使用eos发起一种FSL币作为例子讲解
+#### 3.1 本地启动Nodeos节点
+执行以下命令（暂时忽略配置文件方式），可以观察到控制台正在输出出块信息，目前只有一个出块用户eosio
+`nodeos -e -p eosio --plugin eosio::chain_api_plugin --plugin eosio::history_api_plugin`
+#### 3.2 cleos与nodeos交互
+1. 创建钱包
+执行命令`cleos create wallet`会创建default钱包，按照3.1步骤启动的nodeos，执行命令后会在home目录下建立eosio-wallet目录保存钱包相关数据
+2. 保存私钥
+执行完创建钱包命令后，会输出一串私钥，手动保存起来，丢失会无法解锁钱包，EOSIO现在的版本会在间隔一定时间后自动锁定钱包，锁定后调用以下命令解锁钱包，输入钱包私钥即可解锁
+`cleos wallet unlock`
+3. 创建key
+`cleos create key` -- 手动保存输出的公钥和私钥
+```
+Private key: 5JiUCbo17rrU4H5vjrN7M2eib36VAKdCFopMjVByPLRBn2rbfku
+Public key: EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ
+```
+4. 导入私钥到钱包
+`cleos wallet import 5JiUCbo17rrU4H5vjrN7M2eib36VAKdCFopMjVByPLRBn2rbfku` -- 将步骤3生成的私钥导入钱包
+5. 创建名为eosio.token的account
+执行命令后，创建了一个用户叫eosio.token
+`cleos create account eosio eosio.token EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ`
+6. 创建account: alice 和 bob
+alice:
+`cleos create account eosio alice EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ`
+bob:
+`cleos create account eosio bob EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ EOS8jjLRGqm9uCAREC1tqUEVgro1DURdhmLTkVfR4Baxky8gLxXHQ`
+7. 部署eosio.token合约
+这个合约是eos提供的合约，方便用户发起自己的币，和ERC20类似的功能
+`cleos set contract eosio.token build/contracts/eosio.token`
+8. 创造FSL币
+这个命令生成了1亿个FSL币
+`cleos push action eosio.token create '["eosio", "100000000.0000 FSL"]' -p eosio.token`
+9. 发FSL币给用户
+将所有FSL币都发给eosio用户
+`cleos push action eosio.token issue '["eosio", "100000000.0000 FSL"]' -p eosio.token`
+10. 转币操作
+转移10000个FSL给alice（转给bob的操作就不演示了）
+`cleos push action eosio.token transfer '["eosio", "alice", "10000.0000 FSL","memo"]' -p eosio`
+11. 查询余额
+查询alice的余额
+`cleos get currency balance eosio.token alice`
+## 4. 总结
+以上就是EOS安装到发币的过程了，有许多细节都没有展开来讲，后续慢慢再更新。
+nodeos每次启动的时候不想输入那么多参数，可以配置默认的config,ini文件，路径在~/.local/share/eosio/nodeos/config/config.ini，简单示例如下，追加到文件末尾即可：
+```
+producer-name = eosio
+plugin = eosio::producer_plugin
+plugin = eosio::wallet_api_plugin
+plugin = eosio::chain_api_plugin
+plugin = eosio::http_plugin
+plugin = eosio::history_api_plugin
+```
